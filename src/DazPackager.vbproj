@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DazPackager</RootNamespace>
+    <AssemblyName>DazPackager</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <ApplicationIcon Condition="Exists('icon.ico')">icon.ico</ApplicationIcon>
+
+    <!-- Publish settings: bundle DazPackager.dll into the .exe, but do NOT
+         embed the .NET runtime itself (the target machine needs the .NET 8
+         Runtime installed). Only affects `dotnet publish`, not build/run.
+         A RuntimeIdentifier still needs to be passed via -r at publish time
+         (e.g. -r win-x64), since a single-file executable is platform-specific. -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Import Include="System" />
+    <Import Include="System.Collections.Generic" />
+    <Import Include="System.IO" />
+    <Import Include="System.Linq" />
+    <Import Include="System.Xml.Linq" />
+  </ItemGroup>
+
+</Project>

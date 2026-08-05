@@ -1,0 +1,2 @@
+F:\Visual Studio\DazPackager\src\bin\Release\net8.0\publish\DazPackager.pdb
+F:\Visual Studio\DazPackager\src\bin\Release\net8.0\publish\DazPackager.exe

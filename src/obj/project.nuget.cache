@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "a47kHMJMDN8=",
+  "success": true,
+  "projectFilePath": "F:\\Visual Studio\\DazPackager\\src\\DazPackager.vbproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\raph\\.nuget\\packages\\microsoft.net.illink.tasks\\8.0.29\\microsoft.net.illink.tasks.8.0.29.nupkg.sha512",
+    "C:\\Users\\raph\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\8.0.29\\microsoft.aspnetcore.app.runtime.win-x64.8.0.29.nupkg.sha512",
+    "C:\\Users\\raph\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\8.0.29\\microsoft.windowsdesktop.app.runtime.win-x64.8.0.29.nupkg.sha512",
+    "C:\\Users\\raph\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\8.0.29\\microsoft.netcore.app.runtime.win-x64.8.0.29.nupkg.sha512"
+  ],
+  "logs": []
+}

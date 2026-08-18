@@ -1,3 +1,4 @@
+Imports System.Text.RegularExpressions
 Imports System.IO.Compression
 Imports DazPackager.Models
 
@@ -56,6 +57,13 @@ Namespace Services
             ElseIf files.Any(Function(f) KnownDazFolders.Any(
                 Function(k) f.RelativePath.StartsWith(k & "/", StringComparison.OrdinalIgnoreCase))) Then
                 status = ScanStatus.MissingContentPrefix
+            ElseIf files.Any(Function(f) 
+					' Every single file inside a folder MUST match the exact 1-level prefix pattern
+					Dim folderChoices As String = String.Join("|", KnownDazFolders)
+					Dim pattern As String = "^[^/]+/(?:" & folderChoices & ")/"
+					Return Regex.IsMatch(f.RelativePath, pattern, RegexOptions.IgnoreCase)
+				End Function) Then
+                status = ScanStatus.WrongContentPrefix
             Else
                 status = ScanStatus.UnrecognizedStructure
             End If

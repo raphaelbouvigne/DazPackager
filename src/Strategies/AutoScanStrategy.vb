@@ -1,3 +1,4 @@
+Imports System.Text.RegularExpressions
 Imports DazPackager.Models
 
 Namespace Strategies
@@ -22,6 +23,12 @@ Namespace Strategies
                     For Each f In scan.Files
                         f.Target = "Content/" & f.RelativePath
                     Next
+					
+				Case ScanStatus.WrongContentPrefix
+					For Each f In scan.Files
+						' Replaces any folder name like "My library/" or "Content creator/" to "Content/"
+						f.Target = Regex.Replace(f.RelativePath, "^[^/]+/", "Content/")
+					Next
 
                 Case ScanStatus.UnrecognizedStructure
                     Throw New InvalidOperationException(

@@ -9,6 +9,8 @@ Namespace Models
         OK
         ''' <summary>No "Content/" folder, but recognized Daz folders (data/, People/, Runtime/...) at the root.</summary>
         MissingContentPrefix
+        ''' <summary>Recognized Daz folders (data/, People/, Runtime/...), but not at the root or inside "Content/" folder, but in different one like "My library/" or "Content creator/".</summary>
+		WrongContentPrefix
         ''' <summary>No recognizable Daz structure found.</summary>
         UnrecognizedStructure
     End Enum

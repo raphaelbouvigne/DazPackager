@@ -51,6 +51,8 @@ Namespace Services
             End Using
 
             Dim status As ScanStatus
+			' Join them for the regex patterns
+			Dim folderChoices As String = String.Join("|", KnownDazFolders)
 
             If hasContentRoot Then
                 status = ScanStatus.OK
@@ -58,14 +60,22 @@ Namespace Services
                 Function(k) f.RelativePath.StartsWith(k & "/", StringComparison.OrdinalIgnoreCase))) Then
                 status = ScanStatus.MissingContentPrefix
             ElseIf files.Any(Function(f) 
-					' Every single file inside a folder MUST match the exact 1-level prefix pattern
-					Dim folderChoices As String = String.Join("|", KnownDazFolders)
+					' The folder at root is not Content, but it has known Daz folders inside
 					Dim pattern As String = "^[^/]+/(?:" & folderChoices & ")/"
 					Return Regex.IsMatch(f.RelativePath, pattern, RegexOptions.IgnoreCase)
 				End Function) Then
                 status = ScanStatus.WrongContentPrefix
+            ElseIf files.Any(Function(f)
+                    ' If the Content folder is deeper, like "Whatever/Content/" 
+                    Dim patternNested As String = "^[^/]+/Content/(?:" & folderChoices & ")/"
+                    Return Regex.IsMatch(f.RelativePath, patternNested, RegexOptions.IgnoreCase)
+                End Function) AndAlso files.All(Function(f)
+                    ' But fails if there are any files outside the Content folder, like preview.txt. I know, there are HasExistingManifest and HasExistingSupplement cases in nested cases, but I don't want to handle it currently
+                    Return f.RelativePath.StartsWith(f.RelativePath.Split("/"c)(0) & "/Content/", StringComparison.OrdinalIgnoreCase)
+                End Function) Then
+                status = ScanStatus.NestedContentPrefix
             Else
-                status = ScanStatus.UnrecognizedStructure
+				status = ScanStatus.UnrecognizedStructure
             End If
 
             Return New ScanResult With {

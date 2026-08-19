@@ -29,6 +29,12 @@ Namespace Strategies
 						' Replaces any folder name like "My library/" or "Content creator/" to "Content/"
 						f.Target = Regex.Replace(f.RelativePath, "^[^/]+/", "Content/")
 					Next
+					
+				Case ScanStatus.NestedContentPrefix
+					For Each f In scan.Files
+						' Replaces deeply nested folder paths like "Whatever/Content/" to just "Content/"
+						f.Target = Regex.Replace(f.RelativePath, "^[^/]+/Content/", "Content/")
+					Next
 
                 Case ScanStatus.UnrecognizedStructure
                     Throw New InvalidOperationException(

@@ -56,26 +56,24 @@ Namespace Services
 
             If hasContentRoot Then
                 status = ScanStatus.OK
-            ElseIf files.Any(Function(f) KnownDazFolders.Any(
-                Function(k) f.RelativePath.StartsWith(k & "/", StringComparison.OrdinalIgnoreCase))) Then
+            ElseIf files.Any(Function(f) KnownDazFolders.Any(Function(k) f.RelativePath.StartsWith(k & "/", StringComparison.OrdinalIgnoreCase))) Then
                 status = ScanStatus.MissingContentPrefix
-            ElseIf files.Any(Function(f) 
-					' The folder at root is not Content, but it has known Daz folders inside
-					Dim pattern As String = "^[^/]+/(?:" & folderChoices & ")/"
-					Return Regex.IsMatch(f.RelativePath, pattern, RegexOptions.IgnoreCase)
-				End Function) Then
-                status = ScanStatus.WrongContentPrefix
-            ElseIf files.Any(Function(f)
-                    ' If the Content folder is deeper, like "Whatever/Content/" 
-                    Dim patternNested As String = "^[^/]+/Content/(?:" & folderChoices & ")/"
-                    Return Regex.IsMatch(f.RelativePath, patternNested, RegexOptions.IgnoreCase)
-                End Function) AndAlso files.All(Function(f)
-                    ' But fails if there are any files outside the Content folder, like preview.txt. I know, there are HasExistingManifest and HasExistingSupplement cases in nested cases, but I don't want to handle it currently
-                    Return f.RelativePath.StartsWith(f.RelativePath.Split("/"c)(0) & "/Content/", StringComparison.OrdinalIgnoreCase)
-                End Function) Then
+            ElseIf files.Any(Function(f) Regex.IsMatch(f.RelativePath, "^[^/]+/Content/(?:" & folderChoices & ")/", RegexOptions.IgnoreCase)) AndAlso files.All(Function(f) f.RelativePath.StartsWith(f.RelativePath.Split("/"c)(0) & "/Content/", StringComparison.OrdinalIgnoreCase)) Then
                 status = ScanStatus.NestedContentPrefix
+            ElseIf files.Any(Function(f) Regex.IsMatch(f.RelativePath, "(?:^|/)(?:" & folderChoices & ")/", RegexOptions.IgnoreCase)) Then
+                ' Deep WrongContentPrefix: find the first occurrence of a DAZ folder in any file to determine the root prefix
+                Dim sampleFile = files.FirstOrDefault(Function(f) Regex.IsMatch(f.RelativePath, "(?:^|/)(?:" & folderChoices & ")/", RegexOptions.IgnoreCase))
+                Dim match = Regex.Match(sampleFile.RelativePath, "^.*?(?=(?:" & folderChoices & ")/)", RegexOptions.IgnoreCase)
+                Dim detectedPrefix As String = match.Value ' e.g., "G9-V9 Poses/My DAZ 3D Library/"
+                
+                ' Strict check: all files must reside under this exact deep prefix to avoid junk
+                If files.All(Function(f) f.RelativePath.StartsWith(detectedPrefix, StringComparison.OrdinalIgnoreCase)) Then
+                    status = ScanStatus.WrongContentPrefix
+                Else
+                    status = ScanStatus.UnrecognizedStructure
+                End If
             Else
-				status = ScanStatus.UnrecognizedStructure
+                status = ScanStatus.UnrecognizedStructure
             End If
 
             Return New ScanResult With {

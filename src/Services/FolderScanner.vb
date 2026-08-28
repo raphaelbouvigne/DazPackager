@@ -10,13 +10,6 @@ Namespace Services
     Public Class FolderScanner
         Implements ISourceScanner
 
-        Private ReadOnly KnownDazFolders As String() = {
-            "data", "People", "Runtime", "Environments", "Props",
-            "Scenes", "Scripts", "Camera Presets", "Light Presets",
-            "Render Presets", "Shader Presets", "Materials", "Lights",
-            "Templates", "Textures"
-        }
-
         Public Function Scan(sourcePath As String) As ScanResult Implements ISourceScanner.Scan
             Dim files As New List(Of ScannedFile)
             Dim hasExistingManifest As Boolean
@@ -44,7 +37,7 @@ Namespace Services
 
             If hasContentRoot Then
                 status = ScanStatus.OK
-            ElseIf files.Any(Function(f) KnownDazFolders.Any(
+            ElseIf files.Any(Function(f) KnownDazFolders.Folders.Any(
                 Function(k) f.RelativePath.StartsWith(k & "/", StringComparison.OrdinalIgnoreCase))) Then
                 status = ScanStatus.MissingContentPrefix
             Else

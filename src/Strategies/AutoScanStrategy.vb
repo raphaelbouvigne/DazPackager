@@ -23,18 +23,18 @@ Namespace Strategies
                     For Each f In scan.Files
                         f.Target = "Content/" & f.RelativePath
                     Next
-					
+
                 Case ScanStatus.WrongContentPrefix
                     For Each f In scan.Files
                         ' Dynamically finds the known DAZ folder in the path and replaces everything before it with "Content/"
-                        f.Target = Regex.Replace(f.RelativePath, "^.*?(?=(?:data|People|Runtime|Environments|Props|Scenes|Scripts|Camera Presets|Light Presets|Render Presets|Shader Presets|Materials|Lights|Templates|Textures)/)", "Content/", RegexOptions.IgnoreCase)
+                        f.Target = Regex.Replace(f.RelativePath, "^.*?(?=(?:" & KnownDazFolders.Pattern & ")/)", "Content/", RegexOptions.IgnoreCase)
                     Next
-					
-				Case ScanStatus.NestedContentPrefix
-					For Each f In scan.Files
-						' Replaces deeply nested folder paths like "Whatever/Content/" to just "Content/"
-						f.Target = Regex.Replace(f.RelativePath, "^[^/]+/Content/", "Content/")
-					Next
+
+                Case ScanStatus.NestedContentPrefix
+                    For Each f In scan.Files
+                        ' Replaces deeply nested folder paths like "Whatever/Content/" to just "Content/"
+                        f.Target = Regex.Replace(f.RelativePath, "^[^/]+/Content/", "Content/")
+                    Next
 
                 Case ScanStatus.UnrecognizedStructure
                     Throw New InvalidOperationException(

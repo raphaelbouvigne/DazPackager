@@ -12,14 +12,46 @@ Module Program
         Failed
     End Enum
 
-    Sub Main(args As String())
+        Sub Main(args As String())
         If args.Length < 1 Then
             PrintUsage()
             Return
         End If
 
-        Dim autoYes = args.Any(Function(a) a.Equals("--yes", StringComparison.OrdinalIgnoreCase) OrElse
-                                            a.Equals("-y", StringComparison.OrdinalIgnoreCase))
+        Dim excludedIndices As New HashSet(Of Integer)()
+
+        Dim autoYes = False
+        For i = 0 To args.Length - 1
+            If args(i).Equals("--yes", StringComparison.OrdinalIgnoreCase) OrElse
+               args(i).Equals("-y", StringComparison.OrdinalIgnoreCase) Then
+                autoYes = True
+                excludedIndices.Add(i)
+            End If
+        Next
+
+        Dim outputDir As String = Nothing
+        Dim outputIndex = Array.FindIndex(args, Function(a) a.Equals("--output", StringComparison.OrdinalIgnoreCase) OrElse
+                                                             a.Equals("-o", StringComparison.OrdinalIgnoreCase))
+        If outputIndex >= 0 Then
+            If outputIndex + 1 >= args.Length Then
+                Console.WriteLine("Error: --output requires a folder path argument.")
+                Environment.Exit(1)
+                Return
+            End If
+            outputDir = args(outputIndex + 1)
+            excludedIndices.Add(outputIndex)
+            excludedIndices.Add(outputIndex + 1)
+
+            If Not Directory.Exists(outputDir) Then
+                Try
+                    Directory.CreateDirectory(outputDir)
+                Catch ex As Exception
+                    Console.WriteLine($"Error: could not create output folder '{outputDir}': {ex.Message}")
+                    Environment.Exit(1)
+                    Return
+                End Try
+            End If
+        End If
 
         Dim batchIndex = Array.FindIndex(args, Function(a) a.Equals("--batch", StringComparison.OrdinalIgnoreCase) OrElse
                                                             a.Equals("-b", StringComparison.OrdinalIgnoreCase))
@@ -30,28 +62,23 @@ Module Program
                 Environment.Exit(1)
                 Return
             End If
-            RunBatch(args(batchIndex + 1), autoYes)
+            RunBatch(args(batchIndex + 1), autoYes, outputDir)
             Return
         End If
 
-        ' Single-item mode: separate the --yes flag from positional arguments
-        ' so it doesn't interfere with reading <path> / [product_name].
-        Dim positionalArgs = args.Where(Function(a) Not a.Equals("--yes", StringComparison.OrdinalIgnoreCase) AndAlso
-                                                     Not a.Equals("-y", StringComparison.OrdinalIgnoreCase)).ToArray()
+        ' Single-item mode: keep only the positional args (path / product name),
+        ' stripping out flags and their values by index so a folder path
+        ' passed to --output can never be misread as a product name.
+        Dim positionalArgs = args.Where(Function(a, i) Not excludedIndices.Contains(i)).ToArray()
 
         If positionalArgs.Length < 1 Then
             PrintUsage()
             Return
         End If
 
-        ' Dragging several files/folders onto the .exe at once (Windows) passes
-        ' every dropped path as its own argument. If the second positional
-        ' argument is itself an existing file or folder, this is clearly a
-        ' multi-drop rather than "<path> <product_name>" — process every
-        ' dropped item individually instead of misreading arg 2 as a name.
         If positionalArgs.Length > 1 AndAlso
            (File.Exists(positionalArgs(1)) OrElse Directory.Exists(positionalArgs(1))) Then
-            RunAdHocMultiDrop(positionalArgs, autoYes)
+            RunAdHocMultiDrop(positionalArgs, autoYes, outputDir)
             Return
         End If
 
@@ -64,7 +91,7 @@ Module Program
             Return
         End If
 
-        Dim result = ProcessSingleItem(sourcePath, userProductName, autoYes)
+        Dim result = ProcessSingleItem(sourcePath, userProductName, autoYes, outputDir)
         If result = ProcessResult.Failed Then Environment.Exit(1)
     End Sub
 
@@ -76,7 +103,8 @@ Module Program
         Console.WriteLine("    <path_to_zip_or_folder>  Path to a source .zip file OR an already-extracted product folder")
         Console.WriteLine("    [product_name]           Optional. If omitted, a name is suggested from the source name.")
         Console.WriteLine("    --yes / -y               Optional. Automatically overwrites existing .dsx files without asking.")
-        Console.WriteLine()
+        Console.WriteLine("    --output <folder> / -o <folder>   Optional. Where to write the output package (default: next to the source).")
+		Console.WriteLine()
         Console.WriteLine("Batch mode (process every .zip and subfolder found directly inside a folder):")
         Console.WriteLine("  DazPackager.exe --batch <folder> [--yes]")
         Console.WriteLine("    Product names are always auto-suggested in batch mode (no manual naming per item).")
@@ -94,7 +122,7 @@ Module Program
     ''' used here either, for the same reason as --batch: one name can't
     ''' apply to several different products at once.
     ''' </summary>
-    Private Sub RunAdHocMultiDrop(items As String(), autoYes As Boolean)
+    Private Sub RunAdHocMultiDrop(items As String(), autoYes As Boolean, outputDir As String)
         Console.WriteLine($"{items.Length} item(s) dropped, processing each one...")
         Console.WriteLine()
 
@@ -113,7 +141,7 @@ Module Program
 
             Console.WriteLine($"--- {Path.GetFileName(item.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))} ---")
 
-            Dim result = ProcessSingleItem(item, Nothing, autoYes)
+            Dim result = ProcessSingleItem(item, Nothing, autoYes, outputDir)
             Select Case result
                 Case ProcessResult.Success
                     succeeded.Add(item)
@@ -138,7 +166,7 @@ Module Program
     ''' fails, and prints a summary at the end. No manual product name is
     ''' ever used in this mode — it's always auto-suggested per item.
     ''' </summary>
-    Private Sub RunBatch(batchFolder As String, autoYes As Boolean)
+    Private Sub RunBatch(batchFolder As String, autoYes As Boolean, outputDir As String)
         If Not Directory.Exists(batchFolder) Then
             Console.WriteLine($"Error: folder not found: {batchFolder}")
             Environment.Exit(1)
@@ -164,7 +192,7 @@ Module Program
         For Each item In items
             Console.WriteLine($"--- {Path.GetFileName(item.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))} ---")
 
-            Dim result = ProcessSingleItem(item, Nothing, autoYes)
+            Dim result = ProcessSingleItem(item, Nothing, autoYes, outputDir)
             Select Case result
                 Case ProcessResult.Success
                     succeeded.Add(item)
@@ -194,7 +222,7 @@ Module Program
     ''' Runs the full packaging pipeline for a single source (a .zip file
     ''' or an extracted folder). Shared by single-item mode and batch mode.
     ''' </summary>
-    Private Function ProcessSingleItem(sourcePath As String, userProductName As String, autoYes As Boolean) As ProcessResult
+        Private Function ProcessSingleItem(sourcePath As String, userProductName As String, autoYes As Boolean, outputDir As String) As ProcessResult
         Dim trimmedPath = sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
         Dim isFolder = Directory.Exists(trimmedPath)
         Dim isZip = Not isFolder AndAlso File.Exists(trimmedPath) AndAlso
@@ -269,7 +297,12 @@ Module Program
                 Console.WriteLine($"No 'IM{{id}}-{{variant}}_' prefix found in the source name; DIM requires one to accept the package, so a synthetic one was generated: {outputFileName}")
             End If
 
-            Dim parentDir = Path.GetDirectoryName(Path.GetFullPath(trimmedPath))
+            Dim parentDir As String
+            If Not String.IsNullOrWhiteSpace(outputDir) Then
+                parentDir = Path.GetFullPath(outputDir)
+            Else
+                parentDir = Path.GetDirectoryName(Path.GetFullPath(trimmedPath))
+            End If
             Dim outputPath = Path.Combine(parentDir, outputFileName)
 
             Dim writer As New PackageWriter()

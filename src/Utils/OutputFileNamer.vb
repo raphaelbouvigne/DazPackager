@@ -68,7 +68,7 @@ Namespace Utils
 
             nameForFileName = StripInvalidFileNameChars(nameForFileName)
 
-            Return $"IM{productId}-{variantNumber}_{nameForFileName}{OutputSuffix}.zip"
+            Return $"DP{productId}-{variantNumber}_{nameForFileName}{OutputSuffix}.zip"
         End Function
 
         ''' <summary>

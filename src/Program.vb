@@ -12,19 +12,24 @@ Module Program
         Failed
     End Enum
 
-        Sub Main(args As String())
+    Sub Main(args As String())
         If args.Length < 1 Then
             PrintUsage()
             Return
         End If
 
         Dim excludedIndices As New HashSet(Of Integer)()
-
         Dim autoYes = False
+        Dim deleteSource = False
+
         For i = 0 To args.Length - 1
             If args(i).Equals("--yes", StringComparison.OrdinalIgnoreCase) OrElse
                args(i).Equals("-y", StringComparison.OrdinalIgnoreCase) Then
                 autoYes = True
+                excludedIndices.Add(i)
+            ElseIf args(i).Equals("--delete-source", StringComparison.OrdinalIgnoreCase) OrElse
+                   args(i).Equals("-d", StringComparison.OrdinalIgnoreCase) Then
+                deleteSource = True
                 excludedIndices.Add(i)
             End If
         Next
@@ -53,60 +58,109 @@ Module Program
             End If
         End If
 
-        Dim batchIndex = Array.FindIndex(args, Function(a) a.Equals("--batch", StringComparison.OrdinalIgnoreCase) OrElse
-                                                            a.Equals("-b", StringComparison.OrdinalIgnoreCase))
-
-        If batchIndex >= 0 Then
-            If batchIndex + 1 >= args.Length Then
-                Console.WriteLine("Error: --batch requires a folder path argument.")
+        Dim logPath As String = Nothing
+        Dim logIndex = Array.FindIndex(args, Function(a) a.Equals("--log", StringComparison.OrdinalIgnoreCase) OrElse
+                                                          a.Equals("-l", StringComparison.OrdinalIgnoreCase))
+        If logIndex >= 0 Then
+            If logIndex + 1 >= args.Length Then
+                Console.WriteLine("Error: --log requires a file path argument.")
                 Environment.Exit(1)
                 Return
             End If
-            RunBatch(args(batchIndex + 1), autoYes, outputDir)
-            Return
+            logPath = args(logIndex + 1)
+            excludedIndices.Add(logIndex)
+            excludedIndices.Add(logIndex + 1)
         End If
 
-        ' Single-item mode: keep only the positional args (path / product name),
-        ' stripping out flags and their values by index so a folder path
-        ' passed to --output can never be misread as a product name.
-        Dim positionalArgs = args.Where(Function(a, i) Not excludedIndices.Contains(i)).ToArray()
-
-        If positionalArgs.Length < 1 Then
-            PrintUsage()
-            Return
+        Dim logWriter As StreamWriter = Nothing
+        If Not String.IsNullOrWhiteSpace(logPath) Then
+            Try
+                logWriter = New StreamWriter(logPath, append:=False) With {.AutoFlush = True}
+                logWriter.WriteLine($"DazPackager log — {DateTime.Now:yyyy-MM-dd HH:mm:ss}")
+                logWriter.WriteLine(New String("="c, 60))
+                Console.SetOut(New MultiTextWriter(Console.Out, logWriter))
+            Catch ex As Exception
+                Console.WriteLine($"Warning: could not create log file '{logPath}': {ex.Message}")
+            End Try
         End If
 
-        If positionalArgs.Length > 1 AndAlso
-           (File.Exists(positionalArgs(1)) OrElse Directory.Exists(positionalArgs(1))) Then
-            RunAdHocMultiDrop(positionalArgs, autoYes, outputDir)
-            Return
-        End If
+        Try
+            If deleteSource AndAlso Not autoYes Then
+                Console.WriteLine("WARNING: --delete-source will permanently delete the original source file(s)/folder(s) once packaging succeeds.")
+                Console.WriteLine("This cannot be undone. Make sure you have a backup if needed.")
+				Console.Write("Continue? [Y/n]: ")
+                Dim confirmation = Console.ReadLine()
+                If Not (confirmation?.Trim().Equals("Y", StringComparison.Ordinal)) Then
+                    Console.WriteLine("Aborted, nothing was processed.")
+                    Return
+                End If
+            End If
 
-        Dim sourcePath = positionalArgs(0)
-        Dim userProductName = If(positionalArgs.Length > 1, positionalArgs(1), Nothing)
+            Dim batchIndex = Array.FindIndex(args, Function(a) a.Equals("--batch", StringComparison.OrdinalIgnoreCase) OrElse
+                                                                a.Equals("-b", StringComparison.OrdinalIgnoreCase))
 
-        If Not File.Exists(sourcePath) AndAlso Not Directory.Exists(sourcePath) Then
-            Console.WriteLine($"Error: file or folder not found: {sourcePath}")
-            Environment.Exit(1)
-            Return
-        End If
+            If batchIndex >= 0 Then
+                If batchIndex + 1 >= args.Length Then
+                    Console.WriteLine("Error: --batch requires a folder path argument.")
+                    Environment.Exit(1)
+                    Return
+                End If
+                RunBatch(args(batchIndex + 1), autoYes, outputDir, deleteSource)
+                Return
+            End If
 
-        Dim result = ProcessSingleItem(sourcePath, userProductName, autoYes, outputDir)
-        If result = ProcessResult.Failed Then Environment.Exit(1)
+            ' Single-item mode: keep only the positional args (path / product name),
+            ' stripping out flags and their values by index so a folder path
+            ' passed to --output/--log can never be misread as a product name.
+            Dim positionalArgs = args.Where(Function(a, i) Not excludedIndices.Contains(i)).ToArray()
+
+            If positionalArgs.Length < 1 Then
+                PrintUsage()
+                Return
+            End If
+
+            ' Dragging several files/folders onto the .exe at once (Windows) passes
+            ' every dropped path as its own argument. If the second positional
+            ' argument is itself an existing file or folder, this is clearly a
+            ' multi-drop rather than "<path> <product_name>" — process every
+            ' dropped item individually instead of misreading arg 2 as a name.
+            If positionalArgs.Length > 1 AndAlso
+               (File.Exists(positionalArgs(1)) OrElse Directory.Exists(positionalArgs(1))) Then
+                RunAdHocMultiDrop(positionalArgs, autoYes, outputDir, deleteSource)
+                Return
+            End If
+
+            Dim sourcePath = positionalArgs(0)
+            Dim userProductName = If(positionalArgs.Length > 1, positionalArgs(1), Nothing)
+
+            If Not File.Exists(sourcePath) AndAlso Not Directory.Exists(sourcePath) Then
+                Console.WriteLine($"Error: file or folder not found: {sourcePath}")
+                Environment.Exit(1)
+                Return
+            End If
+
+            Dim result = ProcessSingleItem(sourcePath, userProductName, autoYes, outputDir, deleteSource)
+            If result = ProcessResult.Failed Then Environment.Exit(1)
+        Finally
+            logWriter?.Flush()
+            logWriter?.Close()
+        End Try
     End Sub
 
     Private Sub PrintUsage()
         Console.WriteLine("DazPackager - generates a Manifest.dsx and Supplement.dsx to make a zip installable via Daz Install Manager")
         Console.WriteLine()
         Console.WriteLine("Single item:")
-        Console.WriteLine("  DazPackager.exe <path_to_zip_or_folder> [product_name] [--yes]")
+        Console.WriteLine("  DazPackager.exe <path_to_zip_or_folder> [product_name] [--yes] [--output <folder>] [--delete-source] [--log <file>]")
         Console.WriteLine("    <path_to_zip_or_folder>  Path to a source .zip file OR an already-extracted product folder")
         Console.WriteLine("    [product_name]           Optional. If omitted, a name is suggested from the source name.")
         Console.WriteLine("    --yes / -y               Optional. Automatically overwrites existing .dsx files without asking.")
         Console.WriteLine("    --output <folder> / -o <folder>   Optional. Where to write the output package (default: next to the source).")
-		Console.WriteLine()
+        Console.WriteLine("    --delete-source / -d      Optional. Deletes the original source file/folder after a successful package. Asks for confirmation once at startup (skipped with --yes).")
+        Console.WriteLine("    --log <file> / -l <file>  Optional. Writes a full text log of everything printed to the console into this file.")
+        Console.WriteLine()
         Console.WriteLine("Batch mode (process every .zip and subfolder found directly inside a folder):")
-        Console.WriteLine("  DazPackager.exe --batch <folder> [--yes]")
+        Console.WriteLine("  DazPackager.exe --batch <folder> [--yes] [--output <folder>] [--delete-source] [--log <file>]")
         Console.WriteLine("    Product names are always auto-suggested in batch mode (no manual naming per item).")
         Console.WriteLine()
         Console.WriteLine("Tip (Windows): dragging one or more .zip files / folders directly onto DazPackager.exe works too.")
@@ -122,7 +176,7 @@ Module Program
     ''' used here either, for the same reason as --batch: one name can't
     ''' apply to several different products at once.
     ''' </summary>
-    Private Sub RunAdHocMultiDrop(items As String(), autoYes As Boolean, outputDir As String)
+    Private Sub RunAdHocMultiDrop(items As String(), autoYes As Boolean, outputDir As String, deleteSource As Boolean)
         Console.WriteLine($"{items.Length} item(s) dropped, processing each one...")
         Console.WriteLine()
 
@@ -141,7 +195,7 @@ Module Program
 
             Console.WriteLine($"--- {Path.GetFileName(item.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))} ---")
 
-            Dim result = ProcessSingleItem(item, Nothing, autoYes, outputDir)
+            Dim result = ProcessSingleItem(item, Nothing, autoYes, outputDir, deleteSource)
             Select Case result
                 Case ProcessResult.Success
                     succeeded.Add(item)
@@ -166,7 +220,7 @@ Module Program
     ''' fails, and prints a summary at the end. No manual product name is
     ''' ever used in this mode — it's always auto-suggested per item.
     ''' </summary>
-    Private Sub RunBatch(batchFolder As String, autoYes As Boolean, outputDir As String)
+    Private Sub RunBatch(batchFolder As String, autoYes As Boolean, outputDir As String, deleteSource As Boolean)
         If Not Directory.Exists(batchFolder) Then
             Console.WriteLine($"Error: folder not found: {batchFolder}")
             Environment.Exit(1)
@@ -192,7 +246,7 @@ Module Program
         For Each item In items
             Console.WriteLine($"--- {Path.GetFileName(item.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))} ---")
 
-            Dim result = ProcessSingleItem(item, Nothing, autoYes, outputDir)
+            Dim result = ProcessSingleItem(item, Nothing, autoYes, outputDir, deleteSource)
             Select Case result
                 Case ProcessResult.Success
                     succeeded.Add(item)
@@ -222,7 +276,7 @@ Module Program
     ''' Runs the full packaging pipeline for a single source (a .zip file
     ''' or an extracted folder). Shared by single-item mode and batch mode.
     ''' </summary>
-        Private Function ProcessSingleItem(sourcePath As String, userProductName As String, autoYes As Boolean, outputDir As String) As ProcessResult
+    Private Function ProcessSingleItem(sourcePath As String, userProductName As String, autoYes As Boolean, outputDir As String, deleteSource As Boolean) As ProcessResult
         Dim trimmedPath = sourcePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
         Dim isFolder = Directory.Exists(trimmedPath)
         Dim isZip = Not isFolder AndAlso File.Exists(trimmedPath) AndAlso
@@ -294,7 +348,7 @@ Module Program
                 nameForParsing, parsed, userProvidedProductName:=userProductName)
 
             If Not parsed.IsRecognized Then
-                Console.WriteLine($"No 'IM{{id}}-{{variant}}_' prefix found in the source name; DIM requires one to accept the package, so a synthetic one was generated: {outputFileName}")
+                Console.WriteLine($"No 'DP{{id}}-{{variant}}_' prefix found in the source name; DIM requires one to accept the package, so a synthetic one was generated: {outputFileName}")
             End If
 
             Dim parentDir As String
@@ -319,6 +373,19 @@ Module Program
             Console.WriteLine()
             Console.WriteLine($"Package generated: {outputPath}")
             Console.WriteLine("Drop it into the folder watched by Daz Install Manager so it shows up ready to install in your content library.")
+
+            If deleteSource Then
+                Try
+                    If isFolder Then
+                        Directory.Delete(trimmedPath, recursive:=True)
+                    Else
+                        File.Delete(trimmedPath)
+                    End If
+                    Console.WriteLine($"Source deleted: {trimmedPath}")
+                Catch ex As Exception
+                    Console.WriteLine($"Warning: package was created successfully, but the source could not be deleted: {ex.Message}")
+                End Try
+            End If
 
             Return ProcessResult.Success
 

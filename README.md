@@ -4,15 +4,18 @@ Automatically generates the `Manifest.dsx` and `Supplement.dsx` files needed to 
 
 ## Why this project?
 
-Many Daz Studio assets purchased outside Daz3D come as a "raw" `.zip` (just the `Content/`, `data/`, `Runtime/`... folders) without the metadata Install Manager expects. As a result, they can't be dropped into DIM — you have to extract them manually into your Content Library.
+Many Daz Studio assets purchased outside Daz3D come as a "raw" `.zip` without the metadata Install Manager expects, and real-world sellers rarely package things the same way — some skip the `Content/` folder entirely, some bury it a level deep inside a custom folder, some mix in unrelated folders like `Documentation/`. As a result, these zips can't be dropped into DIM — you have to sort through folders manually.
 
-DazPackager scans the zip, generates the two XML files DIM expects, and produces a copy of the zip ready to be dropped into the folder Install Manager watches.
+DazPackager scans the zip, figures out its structure automatically, generates the two XML files DIM expects, and produces a copy ready to be dropped into the folder Install Manager watches.
 
 ## Features
 
-- 🔍 Automatic scan of the source structure (no manual path entry)
+- 🔍 Automatic scan of the source structure, tolerant of several common real-world folder layouts (see below)
 - 📁 Works on both `.zip` files **and** already-extracted folders
 - 🗂️ Batch mode: process every `.zip` and subfolder inside a given folder in one run
+- 📤 Custom output folder for generated packages (`--output`), e.g. straight into DIM's watched folder
+- 🗑️ Optional automatic deletion of the source after a successful package (`--delete-source`), with a confirmation prompt
+- 📝 Optional full text log of a run (`--log`)
 - 🧩 Generates `Manifest.dsx` (file list + unique GlobalID)
 - 🏷️ Generates `Supplement.dsx` (product metadata)
 - ✨ Automatically suggests a readable product name from the source name
@@ -22,8 +25,9 @@ DazPackager scans the zip, generates the two XML files DIM expects, and produces
 
 ## Expected structure
 
-For best results, your source (zip file or folder) should contain a `Content/` folder at its root:
+DazPackager recognizes several common real-world zip layouts automatically:
 
+**Standard — `Content/` at the root:**
 ```
 MyProduct.zip            (or a MyProduct/ folder, same rule)
 └── Content/
@@ -32,9 +36,32 @@ MyProduct.zip            (or a MyProduct/ folder, same rule)
     └── Runtime/
 ```
 
-**If `Content/` is missing** but the tool recognizes standard Daz folders (`data/`, `People/`, `Runtime/`...) directly at the root, it automatically adds the required prefix.
+**Missing `Content/` prefix — known Daz folders directly at the root:**
+```
+MyProduct.zip
+├── data/
+└── People/
+```
+The `Content/` prefix is added automatically.
 
-**If no recognizable structure is found** (rare case), the tool stops and reports the error instead of generating a potentially broken package.
+**Nested — `Content/` one level deep inside a custom folder** (sibling folders like `Documentation/` are fine too):
+```
+MyProduct.zip
+└── ProductFolder/
+    ├── Content/
+    │   └── People/
+    └── Documentation/
+```
+
+**Deep — known Daz folders buried inside a custom-named library folder, no `Content/` at all:**
+```
+MyProduct.zip
+└── ProductFolder/
+    └── My Library/
+        └── People/
+```
+
+In every case, all files are expected to share the same top-level source folder — a zip mixing content from two unrelated products, or containing files with no recognizable Daz folder anywhere, is rejected instead of producing a potentially broken package.
 
 ## Installation
 
@@ -45,7 +72,7 @@ MyProduct.zip            (or a MyProduct/ folder, same rule)
 ### Build
 
 ```bash
-git clone https://github.com/<your-account>/DazPackager.git
+git clone https://github.com/raphaelbouvigne/DazPackager.git
 cd DazPackager
 dotnet build
 ```
@@ -89,14 +116,17 @@ The examples below use the published `DazPackager.exe` (see [Publishing a standa
 ### Single item (a .zip file or an extracted folder)
 
 ```bash
-DazPackager.exe <path_to_zip_or_folder> [product_name] [--yes]
+DazPackager.exe <path_to_zip_or_folder> [product_name] [--yes] [--output <folder>] [--delete-source] [--log <file>]
 ```
 
 | Argument | Required | Description |
 |---|---|---|
 | `path_to_zip_or_folder` | Yes | Path to a source `.zip` file, or to an already-extracted product folder |
 | `product_name` | No | Product name to use in `Supplement.dsx`. If omitted, a name is automatically suggested from the source name. |
-| `--yes` / `-y` | No | Automatically overwrites existing `.dsx` files without asking for confirmation (handy for batch processing / scripting). |
+| `--yes` / `-y` | No | Automatically overwrites existing `.dsx` files without asking for confirmation (handy for batch processing / scripting). Also skips the `--delete-source` confirmation prompt. |
+| `--output <folder>` / `-o <folder>` | No | Writes the generated package into this folder instead of next to the source. The folder is created automatically if it doesn't exist. Handy for pointing straight at DIM's watched download folder. |
+| `--delete-source` / `-d` | No | Deletes the original `.zip` file or source folder once packaging succeeds. Asks for a one-time confirmation before anything runs (skipped if `--yes` is also given). This is permanent — make sure you have a backup if you need one. |
+| `--log <file>` / `-l <file>` | No | Writes everything printed to the console into this text file as well, for later review. |
 
 Quick example, with a product name that contains spaces (use quotes around both the path and the product name):
 
@@ -110,6 +140,12 @@ Works the same way with an extracted folder instead of a zip:
 DazPackager.exe "path/to/MyExtractedProduct" "your product name" -y
 ```
 
+Sending the output straight to DIM's download folder, deleting the source once done, and keeping a log:
+
+```bash
+DazPackager.exe "your zip file name.zip" --output "C:\Users\You\Documents\DAZ 3D\InstallManager\Downloads" --delete-source --log "dazpackager.log"
+```
+
 ### Example
 
 ```bash
@@ -119,13 +155,13 @@ Scanning rks maxine for genesis 9.zip...
 124 file(s) detected.
 Naming convention not recognized in the source file name.
 Generated GlobalID: 8f3a1c2e-4b5d-4e6f-9a1b-2c3d4e5f6a7b
-No 'IM{id}-{variant}_' prefix found in the source file name; DIM requires one to accept the package, so a synthetic one was generated: IM91234567-01_RksMaxineForGenesis9DIM.zip
+No 'DP{id}-{variant}_' prefix found in the source file name; DIM requires one to accept the package, so a synthetic one was generated: DP91234567-01_RksMaxineForGenesis9DIM.zip
 
-Package generated: IM91234567-01_RksMaxineForGenesis9DIM.zip
+Package generated: DP91234567-01_RksMaxineForGenesis9DIM.zip
 Drop it into the folder watched by Daz Install Manager so it shows up ready to install in your content library.
 ```
 
-Just drop the generated `.zip` file into the download folder watched by Install Manager (`Content Library Download Path`, configurable in DIM's preferences).
+Just drop the generated `.zip` file into the download folder watched by Install Manager (`Content Library Download Path`, configurable in DIM's preferences) — or use `--output` to have it land there automatically.
 
 ### Batch mode
 
@@ -135,9 +171,11 @@ Process every `.zip` file and every subfolder found directly inside a given fold
 DazPackager.exe --batch "path/to/folder/full/of/products" --yes
 ```
 
+All the options above (`--output`, `--delete-source`, `--log`) work in batch mode too, and apply to every item processed.
+
 - Product names are **always auto-suggested** in batch mode — there's no way to pass a manual `product_name` per item, since one run covers many items.
 - If one item fails (unrecognized structure, corrupt zip, etc.), the batch continues with the next item rather than stopping. A summary of successes, skips, and failures is printed at the end.
-- `--yes` is strongly recommended in batch mode — without it, the tool will stop and prompt you individually for every item that already contains a `Manifest.dsx`/`Supplement.dsx`.
+- `--yes` is strongly recommended in batch mode — without it, the tool will stop and prompt you individually for every item that already contains a `Manifest.dsx`/`Supplement.dsx` (and, if `--delete-source` is used, for the initial deletion warning).
 - Only the direct children of the given folder are processed (not nested subfolders inside them) — each child is expected to be one product, either as a `.zip` or as an already-extracted folder.
 
 ### Drag & drop (Windows)
@@ -147,7 +185,7 @@ Once published as an `.exe` (see [Publishing a standalone .exe](#publishing-a-st
 - **One file or folder**: drop it onto `DazPackager.exe` — same result as running the tool with that single path.
 - **Several files/folders at once**: drop them all together onto `DazPackager.exe` — each one is processed independently (auto-suggested product name, no manual naming, since a single drop can't target one specific item).
 
-This relies on how Windows launches an `.exe` when you drop files on it (each dropped path becomes a separate command-line argument) — no extra setup needed.
+This relies on how Windows launches an `.exe` when you drop files on it (each dropped path becomes a separate command-line argument) — no extra setup needed. Drag & drop doesn't let you pass flags like `--output`; use the command line if you need those on a multi-drop.
 
 ### If a Manifest.dsx / Supplement.dsx already exists in the source
 
@@ -164,36 +202,48 @@ Your choice [1/2]:
 
 Pass `--yes` as an argument to overwrite automatically without a prompt (useful in scripts and required for smooth batch runs).
 
+### Deleting the source after packaging
+
+Passing `--delete-source` removes the original `.zip` file (or the whole source folder, recursively) once — and only once — the package has been generated successfully. Because this is irreversible, the tool shows a one-time warning before doing anything, for the whole run:
+
+```
+WARNING: --delete-source will permanently delete the original source file(s)/folder(s) once packaging succeeds.
+This cannot be undone. Make sure you have a backup if needed.
+Continue? [Y/n]:
+```
+
+Type an uppercase `Y` to confirm — anything else aborts the run before any file is touched. Pass `--yes` alongside `--delete-source` to skip this prompt entirely (e.g. for scripted/unattended runs), but only do so once you're confident in the setup, since there's no undo. If a source can't be deleted for some reason (e.g. a file still open elsewhere), the package is kept and a warning is printed instead of failing the whole run.
+
 ## How it works
 
-1. **Scan**: reads the source's file tree (zip entries or folder contents), detects its structure (`Content/` present or not, existing `.dsx` files)
+1. **Scan**: reads the source's file tree (zip entries or folder contents), detects its structure (`Content/` present, missing, nested, or deep — see [Expected structure](#expected-structure)) and any existing `.dsx` files
 2. **GlobalID generation**: a unique identifier (UUID) that identifies the product
 3. **Manifest.dsx generation**: lists every file with its resolved target path
 4. **Supplement.dsx generation**: product metadata (name, install type)
-5. **Assembly**: a new output zip is built from scratch, copying every file to its resolved target path and adding both `.dsx` files at the root — this works identically for zip and folder sources, and correctly relocates files if a `Content/` prefix had to be added
+5. **Assembly**: a new output zip is built from scratch, copying every file to its resolved target path and adding both `.dsx` files at the root — this works identically for zip and folder sources, and correctly relocates files regardless of which structure was detected
 
 ## Known limitations
 
 - The `Manifest.dsx` / `Supplement.dsx` format isn't officially documented by Daz3D — this tool is based on reverse-engineering real packages. Additional fields (figure compatibility, version, dependencies) exist in some official packages and aren't generated here yet.
-- Designed for zips that are already properly organized by the seller (complete `Content/` structure). Fine-grained per-folder mapping customization isn't available yet, but the project's architecture is ready for it (see `IFolderMappingStrategy`).
+- Fine-grained per-folder mapping customization isn't available yet, but the project's architecture is ready for it (see `IFolderMappingStrategy`).
 
-## The "IM{id}-{variant}_" file name prefix
+## The "DP{id}-{variant}_" file name prefix
 
-Real-world testing (confirmed on packages from RenderHub) showed that **DIM requires the zip file name itself to start with an `IM{id}-{variant}_` prefix** to recognize it as installable at all — regardless of what a correct `Manifest.dsx`/`Supplement.dsx` declare inside. A zip named `rks zena for genesis 9.zip`, or even a cleaned-up `rkszenaforgenesis9.zip`, was rejected by DIM until renamed with that prefix.
+Real-world testing (confirmed on packages from RenderHub) showed that **DIM requires the zip file name itself to start with a recognizable `{PREFIX}{id}-{variant}_` prefix** to recognize it as installable at all — regardless of what a correct `Manifest.dsx`/`Supplement.dsx` declare inside. A zip named `rks zena for genesis 9.zip`, or even a cleaned-up `rkszenaforgenesis9.zip`, was rejected by DIM until renamed with that prefix.
 
-DazPackager handles this automatically:
-- If the source zip's file name already follows that convention (e.g. official Daz3D re-exports), the same ID and variant are reused, along with its own short name as-is.
-- Otherwise, a synthetic 8-digit ID is generated deterministically from the source file name (same input → same ID every time, so reprocessing a zip produces a stable output name), in a numeric range chosen to avoid colliding with real Daz3D catalog IDs.
+DazPackager uses the `DP` prefix for the packages it generates (`IM` is reserved for official Daz3D Store packages, and using it on third-party content could be misleading). Handling is automatic either way:
+- If the source zip's file name already follows a recognized convention (e.g. official Daz3D re-exports using `IM`), the same ID and variant are reused, along with its own short name as-is.
+- Otherwise, a synthetic 8-digit ID is generated deterministically from the source file name (same input → same ID every time, so reprocessing a zip produces a stable output name), in a numeric range chosen to avoid colliding with real Daz3D catalog IDs, and prefixed with `DP`.
 
 The readable part of the name follows these casing rules:
 - **Auto-suggested** (no `product_name` argument given): each word is capitalized and spaces are removed — e.g. `rks maxine for genesis 9` → `RksMaxineForGenesis9`.
 - **User-provided** (`product_name` argument given): the exact capitalization you typed is kept, only spaces are removed.
 
-Example: `rks maxine for genesis 9.zip` → `IM9xxxxxxx-01_RksMaxineForGenesis9DIM.zip`
+Example: `rks maxine for genesis 9.zip` → `DP9xxxxxxx-01_RksMaxineForGenesis9DIM.zip`
 
 This synthetic ID has no relation to Daz3D's actual product catalog — it exists solely to satisfy DIM's local file name check.
 
-> **Note**: manual testing showed DIM also accepts longer IDs (e.g. a 9-digit ID in `IM900090092-01_...`), so the exact digit count doesn't appear to be strictly enforced. The 8-digit format used here is simply what's been validated as reliable.
+> **Note**: manual testing showed DIM also accepts longer IDs (e.g. a 9-digit ID), so the exact digit count doesn't appear to be strictly enforced. The 8-digit format used here is simply what's been validated as reliable.
 
 ## Roadmap
 
@@ -203,6 +253,10 @@ This synthetic ID has no relation to Daz3D's actual product catalog — it exist
 - ✅ Drag & drop support (Windows): drop one or more `.zip`/folders directly onto the `.exe`
 - ✅ Custom application icon
 - ✅ Self-contained single-file publish (no .NET runtime install required)
+- ✅ Detection of nested and deep folder structures (`Content/` not at the root)
+- ✅ Custom output folder (`--output`)
+- ✅ Optional source deletion after a successful package (`--delete-source`)
+- ✅ Optional text log of a run (`--log`)
 
 DazPackager is intentionally kept as a lightweight command-line tool rather than a full GUI application. Daz Studio users are generally comfortable with the command line, and a CLI tool is easy to script, batch, or wrap in your own front-end (a `.bat`/shell script, a scheduled task, a small GUI of your own, etc.) — no GUI framework needed to get value out of it.
 

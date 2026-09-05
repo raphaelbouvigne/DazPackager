@@ -130,7 +130,7 @@ Module Program
                 Return
             End If
 
-            Dim sourcePath = positionalArgs(0)
+			Dim sourcePath = positionalArgs(0)
             Dim userProductName = If(positionalArgs.Length > 1, positionalArgs(1), Nothing)
 
             If Not File.Exists(sourcePath) AndAlso Not Directory.Exists(sourcePath) Then
@@ -139,12 +139,43 @@ Module Program
                 Return
             End If
 
+			' A single folder was dropped/given, but it doesn't look like a
+            ' single product itself (no recognizable Daz structure) — if it
+            ' contains zips/subfolders, treat it as a batch container instead
+            ' of failing outright. Handles "dropped a folder full of zips".
+            If Directory.Exists(sourcePath) AndAlso Not LooksLikeSingleProduct(sourcePath) Then
+                Dim batchCandidates = Directory.GetFiles(sourcePath, "*.zip", SearchOption.TopDirectoryOnly).
+                    Concat(Directory.GetDirectories(sourcePath, "*", SearchOption.TopDirectoryOnly)).ToList()
+
+                If batchCandidates.Count > 0 Then
+                    Console.WriteLine($"'{Path.GetFileName(sourcePath)}' doesn't look like a single product on its own — switching to batch mode for its contents.")
+                    Console.WriteLine()
+                    RunBatch(sourcePath, autoYes, outputDir, deleteSource)
+                    PauseBeforeExit()
+                    Return
+                End If
+            End If
+
             Dim result = ProcessSingleItem(sourcePath, userProductName, autoYes, outputDir, deleteSource)
-            If result = ProcessResult.Failed Then Environment.Exit(1)
+            If result = ProcessResult.Failed Then
+                PauseBeforeExit()
+                Environment.Exit(1)
+            End If
         Finally
             logWriter?.Flush()
             logWriter?.Close()
         End Try
+    End Sub
+
+    ''' <summary>
+    ''' Keeps the console window open after a drag-and-drop run (single item,
+    ''' auto-detected batch, or multi-drop) so the person has time to read
+    ''' the result before the window closes on its own.
+    ''' </summary>
+    Private Sub PauseBeforeExit()
+        Console.WriteLine()
+        Console.Write("Press any key to close...")
+        Console.ReadKey()
     End Sub
 
     Private Sub PrintUsage()
@@ -208,10 +239,11 @@ Module Program
             Console.WriteLine()
         Next
 
-        Console.WriteLine("=== Summary ===")
+		Console.WriteLine("=== Summary ===")
         Console.WriteLine($"Succeeded: {succeeded.Count}")
         Console.WriteLine($"Skipped: {skipped.Count}")
         Console.WriteLine($"Failed: {failed.Count}")
+        PauseBeforeExit()
     End Sub
 
     ''' <summary>
@@ -272,6 +304,20 @@ Module Program
         End If
     End Sub
 
+    ''' <summary>
+    ''' Cheaply checks whether a folder looks like a single Daz product on
+    ''' its own (recognizable Content/ folder, known Daz subfolders, etc.),
+    ''' as opposed to being just a plain container of other items.
+    ''' </summary>
+    Private Function LooksLikeSingleProduct(folderPath As String) As Boolean
+        Try
+            Dim scanResult = New FolderScanner().Scan(folderPath)
+            Return scanResult.Status <> ScanStatus.UnrecognizedStructure
+        Catch
+            Return False
+        End Try
+    End Function
+	
     ''' <summary>
     ''' Runs the full packaging pipeline for a single source (a .zip file
     ''' or an extracted folder). Shared by single-item mode and batch mode.

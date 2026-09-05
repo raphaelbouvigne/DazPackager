@@ -57,7 +57,8 @@ Namespace Services
 				Dim nestedFile = files.First(Function(f) Regex.IsMatch(f.RelativePath, "^[^/]+/Content/(?:" & folderChoices & ")/", RegexOptions.IgnoreCase))
 				Dim nestedRoot As String = nestedFile.RelativePath.Split("/"c)(0) & "/"
 
-				If files.All(Function(f) f.RelativePath.StartsWith(nestedRoot, StringComparison.OrdinalIgnoreCase)) Then
+				If files.All(Function(f) f.RelativePath.StartsWith(nestedRoot, StringComparison.OrdinalIgnoreCase) OrElse
+                          Not f.RelativePath.Contains("/"c)) Then
 					status = ScanStatus.NestedContentPrefix
 				Else
 					status = ScanStatus.UnrecognizedStructure
@@ -68,7 +69,8 @@ Namespace Services
 				Dim sampleFile = files.First(Function(f) Regex.IsMatch(f.RelativePath, "(?:^|/)(?:" & folderChoices & ")/", RegexOptions.IgnoreCase))
 				Dim deepRoot As String = sampleFile.RelativePath.Split("/"c)(0) & "/"
 
-				If files.All(Function(f) f.RelativePath.StartsWith(deepRoot, StringComparison.OrdinalIgnoreCase)) Then
+				If files.All(Function(f) f.RelativePath.StartsWith(deepRoot, StringComparison.OrdinalIgnoreCase) OrElse
+                          Not f.RelativePath.Contains("/"c)) Then
 					status = ScanStatus.WrongContentPrefix
 				Else
 					status = ScanStatus.UnrecognizedStructure

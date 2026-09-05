@@ -1,4 +1,5 @@
 Imports System.IO
+Imports System.Text.RegularExpressions
 Imports DazPackager.Models
 
 Namespace Services
@@ -34,12 +35,32 @@ Namespace Services
             Next
 
             Dim status As ScanStatus
+            Dim folderChoices As String = KnownDazFolders.Pattern
 
             If hasContentRoot Then
                 status = ScanStatus.OK
-            ElseIf files.Any(Function(f) KnownDazFolders.Folders.Any(
-                Function(k) f.RelativePath.StartsWith(k & "/", StringComparison.OrdinalIgnoreCase))) Then
+            ElseIf files.Any(Function(f) KnownDazFolders.Folders.Any(Function(k) f.RelativePath.StartsWith(k & "/", StringComparison.OrdinalIgnoreCase))) Then
                 status = ScanStatus.MissingContentPrefix
+            ElseIf files.Any(Function(f) Regex.IsMatch(f.RelativePath, "^[^/]+/Content/(?:" & folderChoices & ")/", RegexOptions.IgnoreCase)) Then
+                Dim nestedFile = files.First(Function(f) Regex.IsMatch(f.RelativePath, "^[^/]+/Content/(?:" & folderChoices & ")/", RegexOptions.IgnoreCase))
+                Dim nestedRoot As String = nestedFile.RelativePath.Split("/"c)(0) & "/"
+
+                If files.All(Function(f) f.RelativePath.StartsWith(nestedRoot, StringComparison.OrdinalIgnoreCase) OrElse
+                                          Not f.RelativePath.Contains("/"c)) Then
+                    status = ScanStatus.NestedContentPrefix
+                Else
+                    status = ScanStatus.UnrecognizedStructure
+                End If
+            ElseIf files.Any(Function(f) Regex.IsMatch(f.RelativePath, "(?:^|/)(?:" & folderChoices & ")/", RegexOptions.IgnoreCase)) Then
+                Dim sampleFile = files.First(Function(f) Regex.IsMatch(f.RelativePath, "(?:^|/)(?:" & folderChoices & ")/", RegexOptions.IgnoreCase))
+                Dim deepRoot As String = sampleFile.RelativePath.Split("/"c)(0) & "/"
+
+                If files.All(Function(f) f.RelativePath.StartsWith(deepRoot, StringComparison.OrdinalIgnoreCase) OrElse
+                                          Not f.RelativePath.Contains("/"c)) Then
+                    status = ScanStatus.WrongContentPrefix
+                Else
+                    status = ScanStatus.UnrecognizedStructure
+                End If
             Else
                 status = ScanStatus.UnrecognizedStructure
             End If

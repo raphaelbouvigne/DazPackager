@@ -177,15 +177,19 @@ All the options above (`--output`, `--delete-source`, `--log`) work in batch mod
 - If one item fails (unrecognized structure, corrupt zip, etc.), the batch continues with the next item rather than stopping. A summary of successes, skips, and failures is printed at the end.
 - `--yes` is strongly recommended in batch mode — without it, the tool will stop and prompt you individually for every item that already contains a `Manifest.dsx`/`Supplement.dsx` (and, if `--delete-source` is used, for the initial deletion warning).
 - Only the direct children of the given folder are processed (not nested subfolders inside them) — each child is expected to be one product, either as a `.zip` or as an already-extracted folder.
+> **Tip**: you don't have to type `--batch` yourself for this — dropping a folder full of zips/subfolders directly onto the `.exe` triggers the same behavior automatically (see [Drag & drop](#drag--drop-windows)).
 
 ### Drag & drop (Windows)
 
 Once published as an `.exe` (see [Publishing a standalone .exe](#publishing-a-standalone-exe)), you can drop files directly onto it instead of using the command line:
 
-- **One file or folder**: drop it onto `DazPackager.exe` — same result as running the tool with that single path.
+- **One file or folder that is itself a recognizable product**: drop it onto `DazPackager.exe` — same result as running the tool with that single path.
 - **Several files/folders at once**: drop them all together onto `DazPackager.exe` — each one is processed independently (auto-suggested product name, no manual naming, since a single drop can't target one specific item).
+- **A single folder that isn't itself a recognizable product, but contains zips or subfolders**: DazPackager automatically switches to batch mode on that folder's contents instead of failing — handy for dropping a whole "download" folder full of purchases at once.
 
-This relies on how Windows launches an `.exe` when you drop files on it (each dropped path becomes a separate command-line argument) — no extra setup needed. Drag & drop doesn't let you pass flags like `--output`; use the command line if you need those on a multi-drop.
+This relies on how Windows launches an `.exe` when you drop files on it (each dropped path becomes a separate command-line argument) — no extra setup needed. Drag & drop doesn't let you pass flags like `--output`; use the command line if you need those.
+
+The console window stays open after any drag-and-drop run (single item, auto-detected batch, or multi-drop) so you have time to read the result — press any key to close it.
 
 ### If a Manifest.dsx / Supplement.dsx already exists in the source
 
